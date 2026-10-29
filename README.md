@@ -54,3 +54,7 @@ checks the motion math with fake frames and saves pngs of the result
 ```
 .build/release/FrameTwin --selftest ./selftest-output
 ```
+
+## license
+
+MIT. see LICENSE
