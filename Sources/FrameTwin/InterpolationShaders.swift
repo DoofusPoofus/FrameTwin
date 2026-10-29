@@ -3,9 +3,11 @@
  they get compiled when the app starts so we dont need a metallib build step
 
  lumaQuarter + lumaHalf   shrink a frame to grayscale at 1/4 then 1/8 then 1/16 size
+                          lumaHalf blurs a bit (1 3 3 1 tent) while shrinking so fine detail doesnt confuse the small levels
  symmetricSearch          for evry pixel try a bunch of motions and keep the one where both frames match best
                           frame A gets moved back half the motion and frame B forward half
                           so the result is already the motion at the middle moment
+                          stepSize is how far apart the tried motions are (0.5 on the tiny level)
  smoothFlow               cleans up the motion so single bad pixels dont stick out
  warpBlend                moves both full size frames by half the motion and blends them
                           where they still dont agree it falls back to the newest real frame
@@ -17,6 +19,7 @@ using namespace metal;
 
 struct SearchSettings {
     int searchRadius;
+    float stepSize;
     int patchRadius;
     int useGuide;
     float smoothnessPenalty;
@@ -49,13 +52,17 @@ kernel void lumaHalf(texture2d<float, access::read> finerLuma [[texture(0)]],
                      texture2d<float, access::write> coarserLuma [[texture(1)]],
                      uint2 position [[thread_position_in_grid]]) {
     if (position.x >= coarserLuma.get_width() || position.y >= coarserLuma.get_height()) return;
-    uint2 corner = position * 2;
-    uint2 lastPixel = uint2(finerLuma.get_width() - 1, finerLuma.get_height() - 1);
-    float brightnessSum = finerLuma.read(min(corner, lastPixel)).r
-                        + finerLuma.read(min(corner + uint2(1, 0), lastPixel)).r
-                        + finerLuma.read(min(corner + uint2(0, 1), lastPixel)).r
-                        + finerLuma.read(min(corner + uint2(1, 1), lastPixel)).r;
-    coarserLuma.write(float4(brightnessSum * 0.25), position);
+    int2 corner = int2(position) * 2 - 1;
+    int2 lastPixel = int2(finerLuma.get_width() - 1, finerLuma.get_height() - 1);
+    float tentWeights[4] = {1.0, 3.0, 3.0, 1.0};
+    float brightnessSum = 0.0;
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            uint2 samplePixel = uint2(clamp(corner + int2(x, y), int2(0), lastPixel));
+            brightnessSum += finerLuma.read(samplePixel).r * tentWeights[x] * tentWeights[y];
+        }
+    }
+    coarserLuma.write(float4(brightnessSum / 64.0), position);
 }
 
 kernel void symmetricSearch(texture2d<float, access::sample> previousLuma [[texture(0)]],
@@ -80,7 +87,7 @@ kernel void symmetricSearch(texture2d<float, access::sample> previousLuma [[text
     float2 bestMotion = startingMotion;
     for (int stepY = -settings.searchRadius; stepY <= settings.searchRadius; stepY++) {
         for (int stepX = -settings.searchRadius; stepX <= settings.searchRadius; stepX++) {
-            float2 tryOffset = float2(stepX, stepY);
+            float2 tryOffset = float2(stepX, stepY) * settings.stepSize;
             float2 tryMotion = startingMotion + tryOffset;
             float2 halfMotion = tryMotion * 0.5;
             float mismatch = 0.0;

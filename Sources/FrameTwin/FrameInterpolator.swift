@@ -3,6 +3,7 @@
  give it evry new real frame in order and it writes the frame that goes between the last one and this one
  it keeps a grayscale pyramid (1/4 1/8 1/16 size) of the last frame so each frame only gets shrunk once
  the motion search starts at the tiny 1/16 level with a wide search and then gets refined on the bigger levels
+ the tiny level trys half pixel steps. with whole steps a 1.5px motion was never close enuf and random matches won
  all the gpu work goes into the command buffer u pass in. nothing runs til u commit it
 */
 
@@ -11,6 +12,7 @@ import Metal
 final class FrameInterpolator {
     struct SearchSettings {
         var searchRadius: Int32
+        var stepSize: Float
         var patchRadius: Int32
         var useGuide: Int32
         var smoothnessPenalty: Float
@@ -43,9 +45,9 @@ final class FrameInterpolator {
     private var hasPreviousPyramid = false
 
     private let searchSettingsPerLevel: [SearchSettings] = [
-        SearchSettings(searchRadius: 2, patchRadius: 2, useGuide: 1, smoothnessPenalty: 0.02),
-        SearchSettings(searchRadius: 2, patchRadius: 2, useGuide: 1, smoothnessPenalty: 0.02),
-        SearchSettings(searchRadius: 6, patchRadius: 2, useGuide: 0, smoothnessPenalty: 0.03),
+        SearchSettings(searchRadius: 2, stepSize: 1, patchRadius: 2, useGuide: 1, smoothnessPenalty: 0.02),
+        SearchSettings(searchRadius: 2, stepSize: 1, patchRadius: 2, useGuide: 1, smoothnessPenalty: 0.02),
+        SearchSettings(searchRadius: 8, stepSize: 0.5, patchRadius: 2, useGuide: 0, smoothnessPenalty: 0.03),
     ]
 
     init(device: MTLDevice) throws {
