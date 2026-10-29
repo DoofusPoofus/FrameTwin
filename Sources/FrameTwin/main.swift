@@ -16,8 +16,10 @@ if let selfTestFlagIndex = launchArguments.firstIndex(of: "--selftest") {
     exit(SelfTest.run(outputFolder: outputFolder))
 }
 
-let application = NSApplication.shared
-let appDelegate = AppDelegate()
-application.delegate = appDelegate
-application.setActivationPolicy(.accessory)
-application.run()
+MainActor.assumeIsolated {
+    let application = NSApplication.shared
+    let appDelegate = AppDelegate()
+    application.delegate = appDelegate
+    application.setActivationPolicy(.accessory)
+    application.run()
+}
